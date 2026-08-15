@@ -33,6 +33,8 @@ El pipeline de datos está estructurado en capas dentro de Databricks utilizando
 ## 📊 Componentes del Dashboard en Power BI
 La capa de presentación ha sido desarrollada integrando **Power BI con código avanzado HTML, CSS y gráficos vectoriales (SVG)**, emulando la interfaz de usuario de aplicaciones de streaming líderes.
 
+###Análisis de Tendencias Musicales y Sentimiento de Usuarios
+
 ![Vista Previa del Dashboard](dashboard/Dashboard_Análisis%20de%20Tendencias%20Musicales%20y%20Sentimiento%20de%20Usuarios.png)
 
 ### Elementos Visuales Destacados:
@@ -63,7 +65,7 @@ El proyecto se encuentra organizado de la siguiente manera:
 ```text
 PROYECTO-SMARTDATA-MB/
 │
-├── certificaciones/         # Credenciales y constancias técnicas (Databricks y Azure)
+├── certificaciones/         # Credenciales 
 ├── dashboard/               # Archivo Power BI (.pbix) y captura de vista previa del reporte
 ├── datasets/                # Archivos fuente (APIs, CSV de canciones y reseñas)
 ├── evidencias/              # Capturas del despliegue en Databricks, Jobs y Azure
