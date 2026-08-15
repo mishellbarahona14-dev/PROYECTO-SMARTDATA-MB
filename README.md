@@ -12,7 +12,7 @@ El pipeline de datos está estructurado en capas dentro de Databricks utilizando
 3. **Gold (Aggregated & Business Ready):** Modelado dimensional optimizado para consumo analítico (`gold_music_metrics`, `gold_music_segments`, `gold_reviews_metrics`).
 
 
-![Arquitectura General del Proyecto](evidencias/Arquitectura_proyecto.png)
+![Arquitectura General del Proyecto](evidencias/06_Arquitectura_proyecto.png)
 
 ---
 ## ¿Qué preguntas responde este proyecto?
