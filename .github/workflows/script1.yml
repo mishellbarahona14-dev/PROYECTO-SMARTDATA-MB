@@ -1,0 +1,221 @@
+name: Dynamic Databricks Music Platform Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+    
+    - name: Install jq & curl
+      run: sudo apt-get update && sudo apt-get install -y jq curl
+    
+    - name: Deploy notebooks to Destination Workspace
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        DEST_BASE="/smartdatayml2"
+        
+        echo "Creando directorio base en Databricks: $DEST_BASE"
+        curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"path\":\"$DEST_BASE\"}" \
+          "$DEST_HOST/api/2.0/workspace/mkdirs"
+
+        # Buscar e importar los notebooks directamente desde la carpeta local /proceso del repositorio
+        for file in proceso/*.*; do
+          if [ -f "$file" ]; then
+            name=$(basename "$file")
+            dest_path="$DEST_BASE/$name"
+            
+            echo "Importando $file → $dest_path"
+            response=$(curl -s -X POST \
+              -H "Authorization: Bearer $DEST_TOKEN" \
+              -H "Content-Type: multipart/form-data" \
+              -F "path=$dest_path" \
+              -F "format=SOURCE" \
+              -F "language=PYTHON" \
+              -F "overwrite=true" \
+              -F "content=@$file" \
+              "$DEST_HOST/api/2.0/workspace/import")
+            echo "Response: $response"
+          fi
+        done
+    
+    - name: Check if workflow exists and delete if necessary
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        WORKFLOW_NAME="WF_SMARTDATA_MUSIC"
+        
+        echo "Verificando si existe el workflow: $WORKFLOW_NAME"
+        
+        workflows_response=$(curl -s -X GET \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          "$DEST_HOST/api/2.1/jobs/list")
+        
+        existing_job_id=$(echo "$workflows_response" | jq -r --arg name "$WORKFLOW_NAME" '.jobs[]? | select(.settings.name == $name) | .job_id')
+        
+        if [ "$existing_job_id" != "" ] && [ "$existing_job_id" != "null" ]; then
+          echo "Workflow encontrado con ID: $existing_job_id. Eliminando..."
+          delete_response=$(curl -s -X POST \
+            -H "Authorization: Bearer $DEST_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"job_id\": $existing_job_id}" \
+            "$DEST_HOST/api/2.1/jobs/delete")
+          echo "Delete response: $delete_response"
+        else
+          echo "No se encontró workflow existente con nombre: $WORKFLOW_NAME"
+        fi
+    
+    - name: Create Databricks Workflow WF_SMARTDATA_MUSIC
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        DEST_BASE="/smartdatayml2"
+        
+        echo "Creando workflow: WF_SMARTDATA_MUSIC"
+        
+        cat > workflow_config.json << EOF
+        {
+          "name": "WF_SMARTDATA_MUSIC",
+          "format": "MULTI_TASK",
+          "tasks": [
+            {
+              "task_key": "Prep_Ambiente",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/I.- Preparacion_Ambiente",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD"
+            },
+            {
+              "task_key": "Ingest_Itunes",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest api-itunes",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Ingest_Spotify_Tracks",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest spotify_tracks",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Ingest_Spotify_Reviews",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest_spotify_reviews",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Transform_MusicData",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/III. - Transform_MusicData",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [
+                {"task_key": "Ingest_Itunes"},
+                {"task_key": "Ingest_Spotify_Tracks"}
+              ]
+            },
+            {
+              "task_key": "Transform_Reviews",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/III.-Transform_Reviews",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Ingest_Spotify_Reviews"}]
+            },
+            {
+              "task_key": "Load_Gold",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/IV.- Load_Gold",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [
+                {"task_key": "Transform_MusicData"},
+                {"task_key": "Transform_Reviews"}
+              ]
+            },
+            {
+              "task_key": "Grants",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/V.- Grants",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Load_Gold"}]
+            }
+          ],
+          "job_clusters": [
+            {
+              "job_cluster_key": "Cluster_SD",
+              "new_cluster": {
+                "spark_version": "13.3.x-scala2.12",
+                "node_type_id": "i3.xlarge",
+                "driver_node_type_id": "i3.xlarge",
+                "num_workers": 0,
+                "data_security_mode": "SINGLE_USER",
+                "custom_tags": {
+                  "environment": "production",
+                  "project": "smartdata_mb",
+                  "cluster_name": "Cluster SD"
+                }
+              }
+            }
+          ],
+          "schedule": {
+            "quartz_cron_expression": "0 0 6 * * ?",
+            "timezone_id": "America/Guayaquil",
+            "pause_status": "PAUSED"
+          },
+          "max_concurrent_runs": 1,
+          "tags": {
+            "environment": "production",
+            "created_by": "github_actions",
+            "project": "smartdata_mb"
+          }
+        }
+        EOF
+        
+        create_response=$(curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @workflow_config.json \
+          "$DEST_HOST/api/2.1/jobs/create")
+        
+        echo "Workflow creation response: $create_response"
+        job_id=$(echo "$create_response" | jq -r '.job_id')
+        
+        if [ "$job_id" != "" ] && [ "$job_id" != "null" ]; then
+          echo "Workflow 'WF_SMARTDATA_MUSIC' creado exitosamente con ID: $job_id"
+        else
+          echo "Error al crear el workflow"
+          exit 1
+        fi
+    
+    - name: Clean up
+      run: |
+        rm -f workflow_config.json
+    
+    - name: Done
+      run: |
+        echo "¡Despliegue y orquestación completados exitosamente usando /smartdatayml2 y Cluster SD!"
