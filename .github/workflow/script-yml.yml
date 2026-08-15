@@ -46,7 +46,7 @@ jobs:
       run: |
         DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
-        DEST_BASE="/workspace/proyectos/smartdata_mb/proceso"
+        DEST_BASE="/smartdatayml2"
         
         # Crear directorio base si no existe
         curl -s -X POST \
@@ -102,7 +102,7 @@ jobs:
       run: |
         DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
-        DEST_BASE="/workspace/proyectos/smartdata_mb/proceso"
+        DEST_BASE="/smartdatayml2"
         
         echo "Creando workflow: WF_SMARTDATA_MUSIC"
         
@@ -243,4 +243,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue y orquestación completados exitosamente para PROYECTO-SMARTDATA-MB utilizando el Cluster SD!"
+        echo "¡Despliegue y orquestación completados exitosamente usando /smartdatayml2 y Cluster SD!"
