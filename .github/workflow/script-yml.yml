@@ -15,61 +15,37 @@ jobs:
     - name: Install jq & curl
       run: sudo apt-get update && sudo apt-get install -y jq curl
     
-    - name: Export multiple notebooks (raw)
-      run: |
-        ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
-        ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
-        NOTEBOOK_BASE="/Workspace/Users/ahuaccachi28@gmail.com/source_ntbk"
-        
-        # Lista de notebooks reales basados en la carpeta /proceso de tu proyecto
-        NOTEBOOKS=(
-          "I.- Preparacion_Ambiente" 
-          "II.- Ingest api-itunes" 
-          "II.- Ingest spotify_tracks" 
-          "II.- Ingest_spotify_reviews" 
-          "III. - Transform_MusicData" 
-          "III.-Transform_Reviews" 
-          "IV.- Load_Gold" 
-          "V.- Grants"
-        )
-        
-        mkdir -p notebooks_to_deploy
-        for nb in "${NOTEBOOKS[@]}"; do
-          echo "Exportando $nb en modo raw..."
-          curl -s -X GET \
-            -H "Authorization: Bearer $ORIGIN_TOKEN" \
-            "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true" \
-            --output "notebooks_to_deploy/$nb.py"
-        done
-    
     - name: Deploy notebooks to Destination Workspace
       run: |
         DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        # Crear directorio base si no existe
+        echo "Creando directorio base en Databricks: $DEST_BASE"
         curl -s -X POST \
           -H "Authorization: Bearer $DEST_TOKEN" \
           -H "Content-Type: application/json" \
           -d "{\"path\":\"$DEST_BASE\"}" \
           "$DEST_HOST/api/2.0/workspace/mkdirs"
 
-        for file in notebooks_to_deploy/*.py; do
-          name=$(basename "$file" .py)
-          dest_path="$DEST_BASE/$name"
-          
-          echo "Importando $file → $dest_path"
-          response=$(curl -s -X POST \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            -H "Content-Type: multipart/form-data" \
-            -F "path=$dest_path" \
-            -F "format=SOURCE" \
-            -F "language=PYTHON" \
-            -F "overwrite=true" \
-            -F "content=@$file" \
-            "$DEST_HOST/api/2.0/workspace/import")
-          echo "Response: $response"
+        # Buscar e importar los notebooks directamente desde la carpeta local /proceso del repositorio
+        for file in proceso/*.*; do
+          if [ -f "$file" ]; then
+            name=$(basename "$file")
+            dest_path="$DEST_BASE/$name"
+            
+            echo "Importando $file → $dest_path"
+            response=$(curl -s -X POST \
+              -H "Authorization: Bearer $DEST_TOKEN" \
+              -H "Content-Type: multipart/form-data" \
+              -F "path=$dest_path" \
+              -F "format=SOURCE" \
+              -F "language=PYTHON" \
+              -F "overwrite=true" \
+              -F "content=@$file" \
+              "$DEST_HOST/api/2.0/workspace/import")
+            echo "Response: $response"
+          fi
         done
     
     - name: Check if workflow exists and delete if necessary
@@ -238,7 +214,6 @@ jobs:
     
     - name: Clean up
       run: |
-        rm -rf notebooks_to_deploy
         rm -f workflow_config.json
     
     - name: Done
