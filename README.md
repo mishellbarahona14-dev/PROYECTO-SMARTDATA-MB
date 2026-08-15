@@ -11,6 +11,23 @@ El pipeline de datos está estructurado en capas dentro de Databricks utilizando
 2. **Silver (Cleaned & Transformed):** Limpieza, normalización de tipos de datos, manejo de nulos y estructuración de tablas relacionales.
 3. **Gold (Aggregated & Business Ready):** Modelado dimensional optimizado para consumo analítico (`gold_music_metrics`, `gold_music_segments`, `gold_reviews_metrics`).
 
+
+![Arquitectura General del Proyecto](evidencias/Arquitectura_proyecto.png)
+
+---
+## ¿Qué preguntas responde este proyecto?
+
+**Análisis de Tendencias Musicales (Modelo Analítico · Power BI):**
+- ¿Cuál es el volumen total de música y hits disponibles en el catálogo analizado?
+- ¿Cómo se distribuye la popularidad promedio de las canciones según el género de iTunes?
+- ¿Cuál es la duración promedio de las pistas musicales y qué géneros destacan?
+- ¿Qué géneros musicales dominan el mercado de streaming según la cantidad de pistas y visualizaciones?
+
+**Análisis de Sentimiento y Satisfacción (Reseñas de Usuarios):**
+- ¿Cómo se comporta el sentimiento general de los usuarios (Positivo, Neutral, Negativo)?
+- ¿Cuál es la calificación promedio de estrellas (`avg_rating`) y el volumen de interacciones (*thumbs up*) por categoría de sentimiento?
+- ¿Cómo reacciona el medidor de satisfacción global ponderado ante los filtros aplicados en el dashboard?
+
 ---
 
 ## 📊 Componentes del Dashboard en Power BI
@@ -28,15 +45,31 @@ La capa de presentación ha sido desarrollada integrando **Power BI con código 
 ---
 El proyecto se encuentra organizado de la siguiente manera:
 
+## Datos del Proyecto
+
+| Métrica | Valor / Descripción |
+|---|---|
+| Fuentes de Datos | Spotify Tracks, Apple Music (iTunes API), Reseñas de Usuarios |
+| Capas de Procesamiento | Medallion Architecture (Bronze ➔ Silver ➔ Gold) |
+| Entidades Gold Principales | `gold_music_metrics`, `gold_music_segments`, `gold_reviews_metrics` |
+| Herramientas de BI | Power BI (`.pbix`) con integración HTML/SVG vía DAX |
+| Componentes Visuales Custom | KPIs Horizontales, Gauge Semicircular, Póster Dinámico por Género |
+| Control de Reversión | Script SQL estructurado para rollback completo de objetos |
+
+---
+
+## Estructura del Repositorio
+
 ```text
 PROYECTO-SMARTDATA-MB/
 │
 ├── certificaciones/         # Credenciales y constancias técnicas (Databricks y Azure)
-├── dashboard/               # Archivo Power BI (.pbix) y captura de vista previa
+├── dashboard/               # Archivo Power BI (.pbix) y captura de vista previa del reporte
 ├── datasets/                # Archivos fuente (APIs, CSV de canciones y reseñas)
 ├── evidencias/              # Capturas del despliegue en Databricks, Jobs y Azure
 ├── PrepAmb/                 # Scripts de preparación inicial del entorno
-├── proceso/                 # Notebooks secuenciales del pipeline de datos (Bronze -> Gold)
+├── proceso/                 # Notebooks secuenciales del pipeline de datos (Bronze -> Gold -> Grants)
 ├── reversion/               # Script SQL de rollback para limpieza total de objetos
+│   └── drop_all_objects.sql
 ├── seguridad/               # Configuración de control de accesos y permisos
-└── README.md                # Documentación principal del proyecto
+└── README.md                # Documentación principal del proyecto proyecto
