@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -22,7 +23,7 @@ jobs:
         DEST_BASE="/smartdatayml2"
         
         if [ -z "$DEST_HOST" ] || [ -z "$DEST_TOKEN" ]; then
-          echo "Error crítico: Los secretos DATABRICKS_DEST_HOST o DATABRICKS_DEST_TOKEN não están configurados."
+          echo "Error crítico: Los secretos DATABRICKS_DEST_HOST o DATABRICKS_DEST_TOKEN no están configurados."
           exit 1
         fi
         
@@ -171,34 +172,21 @@ jobs:
                 "node_type_id": "i3.xlarge",
                 "driver_node_type_id": "i3.xlarge",
                 "num_workers": 0,
-                "data_security_mode": "SINGLE_USER",
-                "custom_tags": {
-                  "environment": "production",
-                  "project": "smartdata_mb",
-                  "cluster_name": "Cluster SD"
-                }
+                "data_security_mode": "SINGLE_USER"
               }
             }
-          ],
-          "schedule": {
-            "quartz_cron_expression": "0 0 6 * * ?",
-            "timezone_id": "America/Guayaquil",
-            "pause_status": "PAUSED"
-          },
-          "max_concurrent_runs": 1,
-          "tags": {
-            "environment": "production",
-            "created_by": "github_actions",
-            "project": "smartdata_mb"
-          }
+          ]
         }
         EOF
         
-        curl -s -X POST \
+        echo "Enviando solicitud de creación a Databricks..."
+        response=$(curl -s -X POST \
           -H "Authorization: Bearer $DEST_TOKEN" \
           -H "Content-Type: application/json" \
           -d @workflow_config.json \
-          "$DEST_HOST/api/2.1/jobs/create"
+          "$DEST_HOST/api/2.1/jobs/create")
+        
+        echo "Respuesta detallada de Databricks: $response"
     
     - name: Clean up
       run: |
