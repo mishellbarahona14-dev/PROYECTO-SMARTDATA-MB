@@ -94,80 +94,55 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        echo "Creando workflow con clúster dedicado de job..."
+        echo "Creando workflow usando clúster existente en producción..."
         
         cat > workflow_config.json << 'EOF'
         {
           "name": "WF_SMARTDATA_MUSIC",
           "format": "MULTI_TASK",
-          "job_clusters": [
-            {
-              "job_cluster_key": "job_cluster_prod",
-              "new_cluster": {
-                "spark_version": "13.3.x-cpu-ml-scala2.12",
-                "node_type_id": "Standard_DS2_v2",
-                "num_workers": 0
-              }
-            }
-          ],
           "tasks": [
             {
               "task_key": "tarea_prep_ambiente",
-              "description": "Ejecuta preparacion de ambiente",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/I.- Preparacion_Ambiente",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2
+              "existing_cluster_id": "0816-022957-lg6xq9lw"
             },
             {
               "task_key": "tarea_ingest_itunes",
-              "description": "Ejecuta ingesta de iTunes",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest api-itunes",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_tracks",
-              "description": "Ejecuta ingesta de Spotify tracks",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest spotify_tracks",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_reviews",
-              "description": "Ejecuta ingesta de Spotify reviews",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest_spotify_reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_transform_music",
-              "description": "Transforma datos de musica",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III. - Transform_MusicData",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [
                 {"task_key": "tarea_ingest_itunes"},
                 {"task_key": "tarea_ingest_spotify_tracks"}
@@ -175,26 +150,20 @@ jobs:
             },
             {
               "task_key": "tarea_transform_reviews",
-              "description": "Transforma reseñas",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III.-Transform_Reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [{"task_key": "tarea_ingest_spotify_reviews"}]
             },
             {
               "task_key": "tarea_load_gold",
-              "description": "Carga capa Gold",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/IV.- Load_Gold",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [
                 {"task_key": "tarea_transform_music"},
                 {"task_key": "tarea_transform_reviews"}
@@ -202,28 +171,15 @@ jobs:
             },
             {
               "task_key": "tarea_grants",
-              "description": "Aplica permisos Grants",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/V.- Grants",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "job_cluster_prod",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
+              "existing_cluster_id": "0816-022957-lg6xq9lw",
               "depends_on": [{"task_key": "tarea_load_gold"}]
             }
           ],
-          "schedule": {
-            "quartz_cron_expression": "0 0 6 * * ?",
-            "timezone_id": "America/Guayaquil",
-            "pause_status": "PAUSED"
-          },
-          "max_concurrent_runs": 1,
-          "tags": {
-            "environment": "production",
-            "created_by": "github_actions",
-            "project": "smartdata_mb"
-          }
+          "max_concurrent_runs": 1
         }
         EOF
         
@@ -252,4 +208,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue a producción completado exitosamente!"
+        echo "¡Despliegue completado exitosamente!"
