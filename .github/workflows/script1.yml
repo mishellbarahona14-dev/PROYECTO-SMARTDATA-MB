@@ -21,11 +21,9 @@ jobs:
         echo "Preparando archivos locales desde la carpeta proceso/"
         mkdir -p notebooks_to_deploy
         
-        # Copiar y renombrar sin extensión para que el script de importación los maneje igual que el original
         for file in proceso/*.*; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
-            # Quitar la extensión .ipynb para mantener compatibilidad con el script
             name_no_ext="${filename%.*}"
             cp "$file" "notebooks_to_deploy/$name_no_ext"
             echo "Preparado: $filename -> notebooks_to_deploy/$name_no_ext"
@@ -105,61 +103,46 @@ jobs:
           "tasks": [
             {
               "task_key": "tarea_prep_ambiente",
-              "description": "Ejecuta preparacion de ambiente",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/I.- Preparacion_Ambiente",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2
+              "job_cluster_key": "cluster_sd"
             },
             {
               "task_key": "tarea_ingest_itunes",
-              "description": "Ejecuta ingesta de iTunes",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest api-itunes",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_tracks",
-              "description": "Ejecuta ingesta de Spotify tracks",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest spotify_tracks",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_reviews",
-              "description": "Ejecuta ingesta de Spotify reviews",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest_spotify_reviews",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_transform_music",
-              "description": "Transforma datos de musica",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III. - Transform_MusicData",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [
                 {"task_key": "tarea_ingest_itunes"},
                 {"task_key": "tarea_ingest_spotify_tracks"}
@@ -167,26 +150,20 @@ jobs:
             },
             {
               "task_key": "tarea_transform_reviews",
-              "description": "Transforma reseñas",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III.-Transform_Reviews",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_ingest_spotify_reviews"}]
             },
             {
               "task_key": "tarea_load_gold",
-              "description": "Carga capa Gold",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/IV.- Load_Gold",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [
                 {"task_key": "tarea_transform_music"},
                 {"task_key": "tarea_transform_reviews"}
@@ -194,14 +171,11 @@ jobs:
             },
             {
               "task_key": "tarea_grants",
-              "description": "Aplica permisos Grants",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/V.- Grants",
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "cluster_sd",
-              "timeout_seconds": 3600,
-              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_load_gold"}]
             }
           ],
@@ -209,38 +183,13 @@ jobs:
             {
               "job_cluster_key": "cluster_sd",
               "new_cluster": {
-                "spark_version": "13.3.x-scala2.12",
-                "node_type_id": "i3.xlarge",
-                "driver_node_type_id": "i3.xlarge",
-                "num_workers": 0,
-                "data_security_mode": "SINGLE_USER",
-                "runtime_engine": "STANDARD",
-                "custom_tags": {
-                  "environment": "production",
-                  "team": "data-engineering",
-                  "cluster_name": "Cluster SD"
-                }
+                "spark_version": "13.3.x-cpu-ml-scala2.12",
+                "node_type_id": "Standard_DS3_v2",
+                "num_workers": 0
               }
             }
           ],
-          "schedule": {
-            "quartz_cron_expression": "0 0 6 * * ?",
-            "timezone_id": "America/Guayaquil",
-            "pause_status": "PAUSED"
-          },
-          "email_notifications": {
-            "on_failure": [],
-            "on_success": [],
-            "no_alert_for_skipped_runs": false
-          },
-          "webhook_notifications": {},
-          "timeout_seconds": 7200,
-          "max_concurrent_runs": 1,
-          "tags": {
-            "environment": "production",
-            "created_by": "github_actions",
-            "project": "smartdata_mb"
-          }
+          "max_concurrent_runs": 1
         }
         EOF
         
