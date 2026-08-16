@@ -15,31 +15,19 @@ jobs:
     - name: Install jq & curl
       run: sudo apt-get update && sudo apt-get install -y jq curl
     
-    - name: Export multiple notebooks (raw)
+    - name: Prepare local notebooks
       run: |
-        ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
-        ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
-        NOTEBOOK_BASE="/Workspace/Users/ahuaccachi28@gmail.com/source_ntbk"
-        
-        # Lista exacta de tus notebooks en el origen
-        NOTEBOOKS=(
-          "I.- Preparacion_Ambiente" 
-          "II.- Ingest api-itunes" 
-          "II.- Ingest spotify_tracks" 
-          "II.- Ingest_spotify_reviews" 
-          "III. - Transform_MusicData" 
-          "III.-Transform_Reviews" 
-          "IV.- Load_Gold" 
-          "V.- Grants"
-        )
-        
+        DEST_BASE="/smartdatayml2"
+        echo "Preparando archivos locales desde la carpeta proceso/"
         mkdir -p notebooks_to_deploy
-        for nb in "${NOTEBOOKS[@]}"; do
-          echo "Exportando $nb en modo raw desde desarrollo..."
-          curl -s -X GET \
-            -H "Authorization: Bearer $ORIGIN_TOKEN" \
-            "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true" \
-            --output "notebooks_to_deploy/$nb.py"
+        
+        for file in proceso/*.*; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            name_no_ext="${filename%.*}"
+            cp "$file" "notebooks_to_deploy/$name_no_ext"
+            echo "Preparado: $filename -> notebooks_to_deploy/$name_no_ext"
+          fi
         done
     
     - name: Deploy notebooks to Destination Workspace
@@ -48,28 +36,30 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        for file in notebooks_to_deploy/*.py; do
-          name=$(basename "$file" .py)
-          dest_path="$DEST_BASE/$name"
-          
-          echo "Creando carpeta $DEST_BASE si no existe en producción..."
-          curl -s -X POST \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"path\":\"$DEST_BASE\"}" \
-            "$DEST_HOST/api/2.0/workspace/mkdirs"
+        echo "Creando carpeta base $DEST_BASE si no existe en producción..."
+        curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"path\":\"$DEST_BASE\"}" \
+          "$DEST_HOST/api/2.0/workspace/mkdirs"
+
+        for file in notebooks_to_deploy/*; do
+          if [ -f "$file" ]; then
+            name=$(basename "$file")
+            dest_path="$DEST_BASE/$name"
             
-          echo "Importando $file → $dest_path en producción"
-          response=$(curl -s -X POST \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            -H "Content-Type: multipart/form-data" \
-            -F "path=$dest_path" \
-            -F "format=SOURCE" \
-            -F "language=PYTHON" \
-            -F "overwrite=true" \
-            -F "content=@$file" \
-            "$DEST_HOST/api/2.0/workspace/import")
-          echo "Response: $response"
+            echo "Importando $file → $dest_path en producción"
+            response=$(curl -s -X POST \
+              -H "Authorization: Bearer $DEST_TOKEN" \
+              -H "Content-Type: multipart/form-data" \
+              -F "path=$dest_path" \
+              -F "format=SOURCE" \
+              -F "language=PYTHON" \
+              -F "overwrite=true" \
+              -F "content=@$file" \
+              "$DEST_HOST/api/2.0/workspace/import")
+            echo "Response: $response"
+          fi
         done
     
     - name: Check if workflow exists and delete if necessary
@@ -259,4 +249,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue de desarrollo a producción completado exitosamente!"
+        echo "¡Despliegue completado exitosamente!"
