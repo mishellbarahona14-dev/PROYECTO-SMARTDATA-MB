@@ -94,20 +94,20 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        echo "Creando workflow: WF_SMARTDATA_MUSIC"
+        echo "Creando workflow: WF_SMARTDATA_MUSIC usando clúster existente"
         
         cat > workflow_config.json << 'EOF'
         {
           "name": "WF_SMARTDATA_MUSIC",
           "format": "MULTI_TASK",
+          "existing_cluster_id": "0816-010850-ygcbgg00",
           "tasks": [
             {
               "task_key": "tarea_prep_ambiente",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/I.- Preparacion_Ambiente",
                 "source": "WORKSPACE"
-              },
-              "job_cluster_key": "cluster_sd"
+              }
             },
             {
               "task_key": "tarea_ingest_itunes",
@@ -115,7 +115,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest api-itunes",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
@@ -124,7 +123,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest spotify_tracks",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
@@ -133,7 +131,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest_spotify_reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
@@ -142,7 +139,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/III. - Transform_MusicData",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [
                 {"task_key": "tarea_ingest_itunes"},
                 {"task_key": "tarea_ingest_spotify_tracks"}
@@ -154,7 +150,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/III.-Transform_Reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [{"task_key": "tarea_ingest_spotify_reviews"}]
             },
             {
@@ -163,7 +158,6 @@ jobs:
                 "notebook_path": "/smartdatayml2/IV.- Load_Gold",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [
                 {"task_key": "tarea_transform_music"},
                 {"task_key": "tarea_transform_reviews"}
@@ -175,18 +169,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/V.- Grants",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
               "depends_on": [{"task_key": "tarea_load_gold"}]
-            }
-          ],
-        "job_clusters": [
-            {
-              "job_cluster_key": "cluster_sd",
-              "new_cluster": {
-                "spark_version": "13.3.x-cpu-ml-scala2.12",
-                "node_type_id": "Standard_DS2_v2",
-                "num_workers": 0
-              }
             }
           ],
           "max_concurrent_runs": 1
@@ -218,4 +201,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue y creación de Workflow completados exitosamente!"
+        echo "¡Despliegue y creación de Workflow con clúster existente completados!"
