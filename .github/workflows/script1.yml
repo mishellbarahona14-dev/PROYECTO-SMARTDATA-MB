@@ -6,7 +6,6 @@ on:
       - main
 
 jobs:
-  
   deploy:
     runs-on: ubuntu-latest
     steps:
@@ -17,32 +16,31 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y jq curl
     
     - name: Deploy notebooks to Destination Workspace
+      env:
+        DEST_HOST: ${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN: ${{ secrets.DATABRICKS_DEST_TOKEN }}
       run: |
-        DEST_HOST="${{ secrets.DATABRICKS_DEST_HOST }}"
-        DEST_TOKEN="${{ secrets.DATABRICKS_DEST_TOKEN }}"
         DEST_BASE="/smartdatayml2"
         
+        if [ -z "$DEST_HOST" ] || [ -z "$DEST_TOKEN" ]; then
+          echo "Error crítico: Los secretos DATABRICKS_DEST_HOST o DATABRICKS_DEST_TOKEN no están configurados."
+          exit 1
+        fi
+        
         echo "Creando o verificando directorio base en Databricks: $DEST_BASE"
-        response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+        curl -s -X POST \
           -H "Authorization: Bearer $DEST_TOKEN" \
           -H "Content-Type: application/json" \
           -d "{\"path\":\"$DEST_BASE\"}" \
-          "$DEST_HOST/api/2.0/workspace/mkdirs")
-          
-        http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
-        body=$(echo "$response" | sed '/HTTP_STATUS/d')
-        
-        echo "Status HTTP: $http_status"
-        echo "Respuesta: $body"
+          "$DEST_HOST/api/2.0/workspace/mkdirs"
 
-        # Buscar e importar cada script dentro de la carpeta local /proceso
         for file in proceso/*.*; do
           if [ -f "$file" ]; then
             name=$(basename "$file")
             dest_path="$DEST_BASE/$name"
             
             echo "Importando $file → $dest_path"
-            import_response=$(curl -s -X POST \
+            curl -s -X POST \
               -H "Authorization: Bearer $DEST_TOKEN" \
               -H "Content-Type: multipart/form-data" \
               -F "path=$dest_path" \
@@ -50,18 +48,16 @@ jobs:
               -F "language=PYTHON" \
               -F "overwrite=true" \
               -F "content=@$file" \
-              "$DEST_HOST/api/2.0/workspace/import")
-            echo "Import Response: $import_response"
+              "$DEST_HOST/api/2.0/workspace/import"
           fi
         done
     
     - name: Check if workflow exists and delete if necessary
+      env:
+        DEST_HOST: ${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN: ${{ secrets.DATABRICKS_DEST_TOKEN }}
       run: |
-        DEST_HOST="${{ secrets.DATABRICKS_DEST_HOST }}"
-        DEST_TOKEN="${{ secrets.DATABRICKS_DEST_TOKEN }}"
         WORKFLOW_NAME="WF_SMARTDATA_MUSIC"
-        
-        echo "Verificando si existe el workflow: $WORKFLOW_NAME"
         
         workflows_response=$(curl -s -X GET \
           -H "Authorization: Bearer $DEST_TOKEN" \
@@ -70,24 +66,20 @@ jobs:
         existing_job_id=$(echo "$workflows_response" | jq -r --arg name "$WORKFLOW_NAME" '.jobs[]? | select(.settings.name == $name) | .job_id')
         
         if [ "$existing_job_id" != "" ] && [ "$existing_job_id" != "null" ]; then
-          echo "Workflow encontrado con ID: $existing_job_id. Eliminando..."
-          delete_response=$(curl -s -X POST \
+          echo "Eliminando workflow anterior ID: $existing_job_id"
+          curl -s -X POST \
             -H "Authorization: Bearer $DEST_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"job_id\": $existing_job_id}" \
-            "$DEST_HOST/api/2.1/jobs/delete")
-          echo "Delete response: $delete_response"
-        else
-          echo "No se encontró workflow existente con nombre: $WORKFLOW_NAME"
+            "$DEST_HOST/api/2.1/jobs/delete"
         fi
     
     - name: Create Databricks Workflow WF_SMARTDATA_MUSIC
+      env:
+        DEST_HOST: ${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN: ${{ secrets.DATABRICKS_DEST_TOKEN }}
       run: |
-        DEST_HOST="${{ secrets.DATABRICKS_DEST_HOST }}"
-        DEST_TOKEN="${{ secrets.DATABRICKS_DEST_TOKEN }}"
         DEST_BASE="/smartdatayml2"
-        
-        echo "Creando workflow: WF_SMARTDATA_MUSIC"
         
         cat > workflow_config.json << EOF
         {
@@ -203,21 +195,11 @@ jobs:
         }
         EOF
         
-        create_response=$(curl -s -X POST \
+        curl -s -X POST \
           -H "Authorization: Bearer $DEST_TOKEN" \
           -H "Content-Type: application/json" \
           -d @workflow_config.json \
-          "$DEST_HOST/api/2.1/jobs/create")
-        
-        echo "Workflow creation response: $create_response"
-        job_id=$(echo "$create_response" | jq -r '.job_id')
-        
-        if [ "$job_id" != "" ] && [ "$job_id" != "null" ]; then
-          echo "Workflow 'WF_SMARTDATA_MUSIC' creado exitosamente con ID: $job_id"
-        else
-          echo "Error al crear el workflow"
-          exit 1
-        fi
+          "$DEST_HOST/api/2.1/jobs/create"
     
     - name: Clean up
       run: |
@@ -225,4 +207,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue y orquestación masiva completados usando /smartdatayml2 y Cluster SD!"
+        echo "¡Despliegue y orquestación completados exitosamente!"
