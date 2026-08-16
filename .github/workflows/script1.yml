@@ -94,12 +94,22 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        echo "Creando workflow: WF_SMARTDATA_MUSIC usando el Cluster SD existente"
+        echo "Creando workflow con clúster dedicado de job..."
         
         cat > workflow_config.json << 'EOF'
         {
           "name": "WF_SMARTDATA_MUSIC",
           "format": "MULTI_TASK",
+          "job_clusters": [
+            {
+              "job_cluster_key": "job_cluster_prod",
+              "new_cluster": {
+                "spark_version": "13.3.x-cpu-ml-scala2.12",
+                "node_type_id": "Standard_DS2_v2",
+                "num_workers": 0
+              }
+            }
+          ],
           "tasks": [
             {
               "task_key": "tarea_prep_ambiente",
@@ -108,7 +118,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/I.- Preparacion_Ambiente",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2
             },
@@ -119,7 +129,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest api-itunes",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
@@ -131,7 +141,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest spotify_tracks",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
@@ -143,7 +153,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/II.- Ingest_spotify_reviews",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
@@ -155,7 +165,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/III. - Transform_MusicData",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [
@@ -170,7 +180,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/III.-Transform_Reviews",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [{"task_key": "tarea_ingest_spotify_reviews"}]
@@ -182,7 +192,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/IV.- Load_Gold",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [
@@ -197,7 +207,7 @@ jobs:
                 "notebook_path": "/smartdatayml2/V.- Grants",
                 "source": "WORKSPACE"
               },
-              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "job_cluster_key": "job_cluster_prod",
               "timeout_seconds": 3600,
               "max_retries": 2,
               "depends_on": [{"task_key": "tarea_load_gold"}]
@@ -208,13 +218,6 @@ jobs:
             "timezone_id": "America/Guayaquil",
             "pause_status": "PAUSED"
           },
-          "email_notifications": {
-            "on_failure": [],
-            "on_success": [],
-            "no_alert_for_skipped_runs": false
-          },
-          "webhook_notifications": {},
-          "timeout_seconds": 7200,
           "max_concurrent_runs": 1,
           "tags": {
             "environment": "production",
@@ -249,4 +252,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue completado exitosamente!"
+        echo "¡Despliegue a producción completado exitosamente!"
