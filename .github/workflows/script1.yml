@@ -15,31 +15,21 @@ jobs:
     - name: Install jq & curl
       run: sudo apt-get update && sudo apt-get install -y jq curl
     
-    - name: Export multiple notebooks (raw)
+    - name: Prepare local notebooks
       run: |
-        ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
-        ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
-        NOTEBOOK_BASE="/Workspace/Users/ahuaccachi28@gmail.com/source_ntbk"
-        
-        # Lista exacta de tus notebooks musicales
-        NOTEBOOKS=(
-          "I.- Preparacion_Ambiente" 
-          "II.- Ingest api-itunes" 
-          "II.- Ingest spotify_tracks" 
-          "II.- Ingest_spotify_reviews" 
-          "III. - Transform_MusicData" 
-          "III.-Transform_Reviews" 
-          "IV.- Load_Gold" 
-          "V.- Grants"
-        )
-        
+        DEST_BASE="/smartdatayml2"
+        echo "Preparando archivos locales desde la carpeta proceso/"
         mkdir -p notebooks_to_deploy
-        for nb in "${NOTEBOOKS[@]}"; do
-          echo "Exportando $nb en modo raw..."
-          curl -s -X GET \
-            -H "Authorization: Bearer $ORIGIN_TOKEN" \
-            "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true" \
-            --output "notebooks_to_deploy/$nb.py"
+        
+        # Copiar y renombrar sin extensión para que el script de importación los maneje igual que el original
+        for file in proceso/*.*; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            # Quitar la extensión .ipynb para mantener compatibilidad con el script
+            name_no_ext="${filename%.*}"
+            cp "$file" "notebooks_to_deploy/$name_no_ext"
+            echo "Preparado: $filename -> notebooks_to_deploy/$name_no_ext"
+          fi
         done
     
     - name: Deploy notebooks to Destination Workspace
@@ -48,28 +38,30 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        for file in notebooks_to_deploy/*.py; do
-          name=$(basename "$file" .py)
-          dest_path="$DEST_BASE/$name"
-          
-          echo "Creando carpeta $DEST_BASE si no existe..."
-          curl -s -X POST \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"path\":\"$DEST_BASE\"}" \
-            "$DEST_HOST/api/2.0/workspace/mkdirs"
+        echo "Creando carpeta base $DEST_BASE si no existe..."
+        curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"path\":\"$DEST_BASE\"}" \
+          "$DEST_HOST/api/2.0/workspace/mkdirs"
+
+        for file in notebooks_to_deploy/*; do
+          if [ -f "$file" ]; then
+            name=$(basename "$file")
+            dest_path="$DEST_BASE/$name"
             
-          echo "Importando $file → $dest_path"
-          response=$(curl -s -X POST \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            -H "Content-Type: multipart/form-data" \
-            -F "path=$dest_path" \
-            -F "format=SOURCE" \
-            -F "language=PYTHON" \
-            -F "overwrite=true" \
-            -F "content=@$file" \
-            "$DEST_HOST/api/2.0/workspace/import")
-          echo "Response: $response"
+            echo "Importando $file → $dest_path"
+            response=$(curl -s -X POST \
+              -H "Authorization: Bearer $DEST_TOKEN" \
+              -H "Content-Type: multipart/form-data" \
+              -F "path=$dest_path" \
+              -F "format=SOURCE" \
+              -F "language=PYTHON" \
+              -F "overwrite=true" \
+              -F "content=@$file" \
+              "$DEST_HOST/api/2.0/workspace/import")
+            echo "Response: $response"
+          fi
         done
     
     - name: Check if workflow exists and delete if necessary
@@ -264,54 +256,9 @@ jobs:
         
         if [ "$job_id" != "" ] && [ "$job_id" != "null" ]; then
           echo "Workflow 'WF_SMARTDATA_MUSIC' creado exitosamente con ID: $job_id"
-          
-          workflow_details=$(curl -s -X GET \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            "$DEST_HOST/api/2.1/jobs/get?job_id=$job_id")
-          
-          echo "Detalles del workflow:"
-          echo "$workflow_details" | jq '.settings | {name, tasks: (.tasks | map({task_key, notebook_task: .notebook_task.notebook_path}))}'
         else
           echo "Error al crear el workflow"
           echo "Response completo: $create_response"
-          exit 1
-        fi
-    
-    - name: Validate Workflow Configuration
-      run: |
-        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
-        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
-        WORKFLOW_NAME="WF_SMARTDATA_MUSIC"
-        
-        echo "Validando la configuración del workflow creado..."
-        
-        workflows_list=$(curl -s -X GET \
-          -H "Authorization: Bearer $DEST_TOKEN" \
-          "$DEST_HOST/api/2.1/jobs/list")
-        
-        job_id=$(echo "$workflows_list" | jq -r --arg name "$WORKFLOW_NAME" '.jobs[]? | select(.settings.name == $name) | .job_id')
-        
-        if [ "$job_id" != "" ] && [ "$job_id" != "null" ]; then
-          echo "Workflow encontrado con ID: $job_id"
-          
-          job_details=$(curl -s -X GET \
-            -H "Authorization: Bearer $DEST_TOKEN" \
-            "$DEST_HOST/api/2.1/jobs/get?job_id=$job_id")
-          
-          echo "Resumen del workflow:"
-          echo "Nombre: $(echo "$job_details" | jq -r '.settings.name')"
-          echo "Número de tareas: $(echo "$job_details" | jq '.settings.tasks | length')"
-          echo ""
-          echo "Tareas configuradas:"
-          echo "$job_details" | jq -r '.settings.tasks[] | "- " + .task_key + " → " + .notebook_task.notebook_path'
-          echo ""
-          echo "Cluster configurado:"
-          echo "Tipo: $(echo "$job_details" | jq -r '.settings.job_clusters[0].new_cluster.node_type_id')"
-          echo "Workers: $(echo "$job_details" | jq -r '.settings.job_clusters[0].new_cluster.num_workers')"
-          echo "Spark Version: $(echo "$job_details" | jq -r '.settings.job_clusters[0].new_cluster.spark_version')"
-          
-        else
-          echo "No se pudo encontrar el workflow creado"
           exit 1
         fi
     
@@ -322,11 +269,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue completado exitosamente!"
-        echo ""
-        echo "Resumen:"
-        echo "Directorio destino: /smartdatayml2"
-        echo "Workflow creado: WF_SMARTDATA_MUSIC"
-        echo "Cluster: Cluster SD (configurado como cluster_sd)"
-        echo ""
-        echo "Accede a tu workspace de Databricks en la sección 'Jobs & Pipelines' para ver el workflow"
+        echo "¡Despliegue y creación de Workflow completados exitosamente!"
