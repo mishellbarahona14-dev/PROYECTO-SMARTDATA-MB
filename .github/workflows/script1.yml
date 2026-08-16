@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -22,7 +23,7 @@ jobs:
         DEST_BASE="/smartdatayml2"
         
         if [ -z "$DEST_HOST" ] || [ -z "$DEST_TOKEN" ]; then
-          echo "Error crítico: Los secretos DATABRICKS_DEST_HOST o DATABRICKS_DEST_TOKEN não están configurados."
+          echo "Error crítico: Los secretos DATABRICKS_DEST_HOST o DATABRICKS_DEST_TOKEN no están configurados."
           exit 1
         fi
         
@@ -72,7 +73,7 @@ jobs:
             -d "{\"job_id\": $existing_job_id}" \
             "$DEST_HOST/api/2.1/jobs/delete"
         fi
-        
+    
     - name: Create Databricks Workflow WF_SMARTDATA_MUSIC
       env:
         DEST_HOST: ${{ secrets.DATABRICKS_DEST_HOST }}
@@ -92,6 +93,75 @@ jobs:
                 "source": "WORKSPACE"
               },
               "job_cluster_key": "Cluster_SD"
+            },
+            {
+              "task_key": "Ingest_Itunes",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest api-itunes.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Ingest_Spotify_Tracks",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest spotify_tracks.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Ingest_Spotify_Reviews",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/II.- Ingest_spotify_reviews.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Prep_Ambiente"}]
+            },
+            {
+              "task_key": "Transform_MusicData",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/III. - Transform_MusicData.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [
+                {"task_key": "Ingest_Itunes"},
+                {"task_key": "Ingest_Spotify_Tracks"}
+              ]
+            },
+            {
+              "task_key": "Transform_Reviews",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/III.-Transform_Reviews.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Ingest_Spotify_Reviews"}]
+            },
+            {
+              "task_key": "Load_Gold",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/IV.- Load_Gold.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [
+                {"task_key": "Transform_MusicData"},
+                {"task_key": "Transform_Reviews"}
+              ]
+            },
+            {
+              "task_key": "Grants",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/V.- Grants.ipynb",
+                "source": "WORKSPACE"
+              },
+              "job_cluster_key": "Cluster_SD",
+              "depends_on": [{"task_key": "Load_Gold"}]
             }
           ],
           "job_clusters": [
@@ -117,3 +187,11 @@ jobs:
           "$DEST_HOST/api/2.1/jobs/create")
         
         echo "Respuesta detallada de Databricks: $response"
+    
+    - name: Clean up
+      run: |
+        rm -f workflow_config.json
+    
+    - name: Done
+      run: |
+        echo "¡Despliegue y orquestación completados exitosamente!"
