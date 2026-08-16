@@ -15,19 +15,31 @@ jobs:
     - name: Install jq & curl
       run: sudo apt-get update && sudo apt-get install -y jq curl
     
-    - name: Prepare local notebooks
+    - name: Export multiple notebooks (raw)
       run: |
-        DEST_BASE="/smartdatayml2"
-        echo "Preparando archivos locales desde la carpeta proceso/"
-        mkdir -p notebooks_to_deploy
+        ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
+        ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
+        NOTEBOOK_BASE="/Workspace/Users/ahuaccachi28@gmail.com/source_ntbk"
         
-        for file in proceso/*.*; do
-          if [ -f "$file" ]; then
-            filename=$(basename "$file")
-            name_no_ext="${filename%.*}"
-            cp "$file" "notebooks_to_deploy/$name_no_ext"
-            echo "Preparado: $filename -> notebooks_to_deploy/$name_no_ext"
-          fi
+        # Lista exacta de tus notebooks en el origen
+        NOTEBOOKS=(
+          "I.- Preparacion_Ambiente" 
+          "II.- Ingest api-itunes" 
+          "II.- Ingest spotify_tracks" 
+          "II.- Ingest_spotify_reviews" 
+          "III. - Transform_MusicData" 
+          "III.-Transform_Reviews" 
+          "IV.- Load_Gold" 
+          "V.- Grants"
+        )
+        
+        mkdir -p notebooks_to_deploy
+        for nb in "${NOTEBOOKS[@]}"; do
+          echo "Exportando $nb en modo raw desde desarrollo..."
+          curl -s -X GET \
+            -H "Authorization: Bearer $ORIGIN_TOKEN" \
+            "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true" \
+            --output "notebooks_to_deploy/$nb.py"
         done
     
     - name: Deploy notebooks to Destination Workspace
@@ -36,30 +48,28 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        echo "Creando carpeta base $DEST_BASE si no existe..."
-        curl -s -X POST \
-          -H "Authorization: Bearer $DEST_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d "{\"path\":\"$DEST_BASE\"}" \
-          "$DEST_HOST/api/2.0/workspace/mkdirs"
-
-        for file in notebooks_to_deploy/*; do
-          if [ -f "$file" ]; then
-            name=$(basename "$file")
-            dest_path="$DEST_BASE/$name"
+        for file in notebooks_to_deploy/*.py; do
+          name=$(basename "$file" .py)
+          dest_path="$DEST_BASE/$name"
+          
+          echo "Creando carpeta $DEST_BASE si no existe en producción..."
+          curl -s -X POST \
+            -H "Authorization: Bearer $DEST_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"path\":\"$DEST_BASE\"}" \
+            "$DEST_HOST/api/2.0/workspace/mkdirs"
             
-            echo "Importando $file → $dest_path"
-            response=$(curl -s -X POST \
-              -H "Authorization: Bearer $DEST_TOKEN" \
-              -H "Content-Type: multipart/form-data" \
-              -F "path=$dest_path" \
-              -F "format=SOURCE" \
-              -F "language=PYTHON" \
-              -F "overwrite=true" \
-              -F "content=@$file" \
-              "$DEST_HOST/api/2.0/workspace/import")
-            echo "Response: $response"
-          fi
+          echo "Importando $file → $dest_path en producción"
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer $DEST_TOKEN" \
+            -H "Content-Type: multipart/form-data" \
+            -F "path=$dest_path" \
+            -F "format=SOURCE" \
+            -F "language=PYTHON" \
+            -F "overwrite=true" \
+            -F "content=@$file" \
+            "$DEST_HOST/api/2.0/workspace/import")
+          echo "Response: $response"
         done
     
     - name: Check if workflow exists and delete if necessary
@@ -94,7 +104,7 @@ jobs:
         DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
         DEST_BASE="/smartdatayml2"
         
-        echo "Creando workflow: WF_SMARTDATA_MUSIC"
+        echo "Creando workflow: WF_SMARTDATA_MUSIC usando el Cluster SD existente"
         
         cat > workflow_config.json << 'EOF'
         {
@@ -103,46 +113,61 @@ jobs:
           "tasks": [
             {
               "task_key": "tarea_prep_ambiente",
+              "description": "Ejecuta preparacion de ambiente",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/I.- Preparacion_Ambiente",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd"
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2
             },
             {
               "task_key": "tarea_ingest_itunes",
+              "description": "Ejecuta ingesta de iTunes",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest api-itunes",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_tracks",
+              "description": "Ejecuta ingesta de Spotify tracks",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest spotify_tracks",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_ingest_spotify_reviews",
+              "description": "Ejecuta ingesta de Spotify reviews",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/II.- Ingest_spotify_reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_prep_ambiente"}]
             },
             {
               "task_key": "tarea_transform_music",
+              "description": "Transforma datos de musica",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III. - Transform_MusicData",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [
                 {"task_key": "tarea_ingest_itunes"},
                 {"task_key": "tarea_ingest_spotify_tracks"}
@@ -150,20 +175,26 @@ jobs:
             },
             {
               "task_key": "tarea_transform_reviews",
+              "description": "Transforma reseñas",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/III.-Transform_Reviews",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_ingest_spotify_reviews"}]
             },
             {
               "task_key": "tarea_load_gold",
+              "description": "Carga capa Gold",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/IV.- Load_Gold",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [
                 {"task_key": "tarea_transform_music"},
                 {"task_key": "tarea_transform_reviews"}
@@ -171,25 +202,35 @@ jobs:
             },
             {
               "task_key": "tarea_grants",
+              "description": "Aplica permisos Grants",
               "notebook_task": {
                 "notebook_path": "/smartdatayml2/V.- Grants",
                 "source": "WORKSPACE"
               },
-              "job_cluster_key": "cluster_sd",
+              "existing_cluster_id": "0816-010850-ygcbgg00",
+              "timeout_seconds": 3600,
+              "max_retries": 2,
               "depends_on": [{"task_key": "tarea_load_gold"}]
             }
           ],
-          "job_clusters": [
-            {
-              "job_cluster_key": "cluster_sd",
-              "new_cluster": {
-                "spark_version": "13.3.x-cpu-ml-scala2.12",
-                "node_type_id": "Standard_DS3_v2",
-                "num_workers": 0
-              }
-            }
-          ],
-          "max_concurrent_runs": 1
+          "schedule": {
+            "quartz_cron_expression": "0 0 6 * * ?",
+            "timezone_id": "America/Guayaquil",
+            "pause_status": "PAUSED"
+          },
+          "email_notifications": {
+            "on_failure": [],
+            "on_success": [],
+            "no_alert_for_skipped_runs": false
+          },
+          "webhook_notifications": {},
+          "timeout_seconds": 7200,
+          "max_concurrent_runs": 1,
+          "tags": {
+            "environment": "production",
+            "created_by": "github_actions",
+            "project": "smartdata_mb"
+          }
         }
         EOF
         
@@ -218,4 +259,4 @@ jobs:
     
     - name: Done
       run: |
-        echo "¡Despliegue y creación de Workflow completados exitosamente!"
+        echo "¡Despliegue de desarrollo a producción completado exitosamente!"
